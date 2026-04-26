@@ -11,27 +11,47 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# Cargar datos del dataset
+print("Comienza la simulación del modelo ML...\n")
+
+# Cargamos CSV
 csv = pandas.read_csv('data-roomA-10T.csv', sep=';')
 csv.columns = csv.columns.str.strip()
 csv['Date'] = pandas.to_datetime(csv['Date'], utc=True)
 csv.set_index('Date', inplace=True)
 
+# Leemos los datos de la sala 68 y ordenamos
 room_68 = csv[csv['room'] == 68].copy()
 room_68.sort_index(inplace=True)
 
+# Salas en bloque A
 bloqueA_rooms = csv['room'].nunique()
-estado_HVAC = [room_68['V5_0'] == 1, room_68['V5_1'] == 1, room_68['V5_2'] == 1]
-room_68['hvac'] = numpy.select(estado_HVAC, [0, 1, -1])
 
+# Estado del HVAC
+estado_HVAC = [room_68['V5_0'] == 1, room_68['V5_1'] == 1, room_68['V5_2'] == 1]
+
+# En función de si el aporte calorífico es positivo (calefacción) o negativo (aire acondicionado)
+multiplicadores = [
+    0,   
+    1,   
+    -1   
+]
+
+room_68['hvac'] = numpy.select(estado_HVAC, multiplicadores)
+
+# Definimos el rendimiento estimado del equipo 
 COP_estimado = 3.0
+
 #room_68['dif_cons_limpio'] = room_68['dif_cons'].clip(upper=25.0)
 #room_68['dif_cons_suavizado'] = room_68['dif_cons_limpio'].rolling(window=3, min_periods=1).mean()
-room_68['P_electrica_W'] = (room_68['dif_cons'] * 6 * 1000) / bloqueA_rooms
-room_68['Q_hvac'] = room_68['P_electrica_W'] * COP_estimado * room_68['hvac']
-room_68['Q_hvac'] = room_68['Q_hvac'].clip(lower=-3500.0, upper=3500.0)
 
-# Cargamos los datos necesarios
+# Calculamos la potencia electrica entre mediciones
+# se divide entre el número de salas ya que el consumo se mide por bloque
+room_68['P_electrica_W'] = (room_68['dif_cons'] * 6 * 1000) / bloqueA_rooms
+
+# Calculamos el calor térmico (Q)
+room_68['Q_hvac'] = room_68['P_electrica_W'] * COP_estimado * room_68['hvac']
+
+# Usamos los datos del dataset que usaremos para 
 datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'Q_hvac', 'radmed']).copy()
 
 # Hacemos que el modelo conozca el comportamiento, es decir, aprenda en función de la hora y dia de la semana
@@ -81,25 +101,23 @@ mse = mean_squared_error(y_test, y_pred_test)
 rmse = numpy.sqrt(mse)
 r2 = r2_score(y_test, y_pred_test)
 
-print("RESULTADOS SVR DESPUES DEL ENTRENAMIENTO\n")
+print("RESULTADOS SVR DESPUES DEL ENTRENAMIENTO")
 print(f"MAE  (Error Medio Absoluto) : {mae:.3f} °C")
 print(f"MSE  (Error Cuadrático Medio): {mse:.3f}")
 print(f"RMSE (Raíz del MSE)         : {rmse:.3f} °C")
 print(f"R2   (Coef. de Determinación): {r2:.4f}\n")
       
-print("COSTE COMPUTACIONAL\n")
+print("COSTE COMPUTACIONAL")
 print(f"Tiempo Entrenamiento : {tiempo_train:.4f} segundos")
-print(f"Tiempo Predicción    : {tiempo_pred * 1000:.2f} milisegundos")
+print(f"Tiempo Predicción    : {tiempo_pred:.2f} segundos")
 
-# --- 9. GRÁFICA COMPARATIVA ---
+# Gráfica
 plt.figure(figsize=(15, 7))
+plt.plot(y_test.index, y_test, label='Temperatura interior real', color='black', linewidth=1.5)
+plt.plot(y_test.index, y_pred_test, label='Temperatura predecida con ML', color='orange', linestyle='--')
+plt.plot(y_test.index, X_test['tmed'], label='Temperatura exterior', color='blue', alpha=0.3)
 
-# Graficamos SOLO el segmento de Test para ver cómo se comporta en "el mundo real"
-plt.plot(y_test.index, y_test, label='T. Interior REAL (Sensor)', color='black', linewidth=1.5)
-plt.plot(y_test.index, y_pred_test, label='T. Predicha (SVR Black-Box)', color='magenta', linestyle='--')
-plt.plot(y_test.index, X_test['tmed'], label='T. Exterior', color='blue', alpha=0.3)
-
-plt.title('Evaluación SVR')
+plt.title('Modelo Datos con SVR')
 plt.ylabel('Temperatura (°C)')
 plt.legend()
 plt.grid(True, alpha=0.3)

@@ -16,8 +16,8 @@ room_68 = csv[csv['room'] == 68].copy()
 room_68.sort_index(inplace=True)
 
 # Buscamos si hay huecos de mas de 10 minutos
-diferencia_t = room_68.index.to_series().diff()
-huecos_68 = diferencia_t[diferencia_t > pandas.Timedelta(minutes=10)]
+#diferencia_t = room_68.index.to_series().diff()
+#huecos_68 = diferencia_t[diferencia_t > pandas.Timedelta(minutes=10)]
 
 # Salas en bloque A
 bloqueA_rooms = csv['room'].nunique()
@@ -34,7 +34,7 @@ multiplicadores = [
 
 room_68['hvac'] = numpy.select(estado_HVAC, multiplicadores)
 
-# Definimos el rendimiento o estimado del equipo 
+# Definimos el rendimiento estimado del equipo 
 COP_estimado = 4.5
 
 # Calculamos la potencia electrica entre mediciones
@@ -44,7 +44,7 @@ room_68['P_electrica_W'] = (room_68['dif_cons'] * 6 * 1000) / (bloqueA_rooms)
 # Calculamos el calor térmico (Q)
 room_68['Q_hvac'] = room_68['P_electrica_W'] * COP_estimado * room_68['hvac']
 
-# Usamos los datos del dataset que usaremos para calcular el 1R1C
+# Usamos los datos del dataset que usaremos para modelar el 1R1C
 datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'Q_hvac', 'radmed']).copy()
 
 # Valores típicos de R y C
