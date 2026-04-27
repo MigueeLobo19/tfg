@@ -58,7 +58,7 @@ datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'Q_hvac', 'radmed']).copy()
 datos_limpios['hora'] = datos_limpios.index.hour
 datos_limpios['dia_semana'] = datos_limpios.index.dayofweek 
 
-# Entradas y salidas del sistema
+# Entradas y salidas del modelo
 columnas_X = ['tmed', 'hvac', 'hora', 'dia_semana', 'radmed']
 X = datos_limpios[columnas_X]
 y = datos_limpios['V2'] 
@@ -76,22 +76,18 @@ scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-# modelo SVR: con kernerl rbf para capturar la inercia térmica
+# Modelo SVR
 modelo_svr = SVR(kernel='rbf', C=10.0, epsilon=0.1) 
 
 print("\nEntrenando modelo SVR")
 inicio_entrenamiento = time.perf_counter()
-
 modelo_svr.fit(X_train_scaled, y_train)
-
 fin_entrenamiento = time.perf_counter()
 tiempo_train = fin_entrenamiento - inicio_entrenamiento
 
 # Predicción sobre datos test
 inicio_prediccion = time.perf_counter()
-
 y_pred_test = modelo_svr.predict(X_test_scaled)
-
 fin_prediccion = time.perf_counter()
 tiempo_pred = fin_prediccion - inicio_prediccion
 

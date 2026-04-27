@@ -55,7 +55,6 @@ Asol_inicial = 2
 col_T_int = 'V2'
 col_T_ext = 'tmed'
 
-inicio_simulacion = time.perf_counter()
 def simulacion_1R1C(T_ext, Q_hvac, Rad_solar, T_int_inicial, R, C, A_sol, dt_minutos=10):
     dt_segundos = dt_minutos * 60
     n_pasos = len(T_ext)
@@ -63,13 +62,12 @@ def simulacion_1R1C(T_ext, Q_hvac, Rad_solar, T_int_inicial, R, C, A_sol, dt_min
     T_sim = numpy.zeros(n_pasos)
     T_sim[0] = T_int_inicial
     
-    # Extraemos los valores de las series de Pandas a arrays de Numpy (más rápido)
+  
     T_ext_vals = T_ext.values
     Q_hvac_vals = Q_hvac.values
-    Rad_vals = Rad_solar.values # <-- Aquí van los datos del sensor (W/m2)
+    Rad_vals = Rad_solar.values 
     
     for i in range(n_pasos - 1):
-
         flujo_paredes = (T_ext_vals[i] - T_sim[i]) / R
         Q_sol = Rad_vals[i] * A_sol 
         dT = (flujo_paredes + Q_hvac_vals[i] + Q_sol) / C
@@ -78,6 +76,7 @@ def simulacion_1R1C(T_ext, Q_hvac, Rad_solar, T_int_inicial, R, C, A_sol, dt_min
         
     return T_sim
 
+inicio_simulacion = time.perf_counter()
 T_simulada = simulacion_1R1C(
     T_ext = datos_limpios[col_T_ext],
     Q_hvac = datos_limpios['Q_hvac'],

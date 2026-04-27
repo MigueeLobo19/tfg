@@ -2,39 +2,52 @@ import pandas
 import numpy
 import matplotlib.pyplot as plt 
 from sklearn.svm import SVR
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import time
 
-# --- 1. CARGA Y PREPARACIÓN DE DATOS ---
-print("Cargando y procesando datos...")
-csv = pandas.read_csv('data-roomA-10T.csv', sep=';')
+print("Comienza la simulación del modelo híbrido...\n")
 
+# Cargamos CSV
+csv = pandas.read_csv('data-roomA-10T.csv', sep=';')
 csv.columns = csv.columns.str.strip()
 csv['Date'] = pandas.to_datetime(csv['Date'], utc=True)
 csv.set_index('Date', inplace=True)
 
-# Filtramos la sala 68 y ordenamos
+# Leemos los datos de la sala 68 y ordenamos
 room_68 = csv[csv['room'] == 68].copy()
 room_68.sort_index(inplace=True)
 
-# Número de salas en el Bloque A para repartir el consumo
+# Salas en bloque A
 bloqueA_rooms = csv['room'].nunique()
 
-
-# Lógica del HVAC (0 = Apagado, 1 = Calefacción, -1 = Frío)
+# Estado del HVAC
 estado_HVAC = [room_68['V5_0'] == 1, room_68['V5_1'] == 1, room_68['V5_2'] == 1]
-multiplicadores = [0, 1, -1]
+
+# En función de si el aporte calorífico es positivo (calefacción) o negativo (aire acondicionado)
+multiplicadores = [
+    0,   
+    1,   
+    -1   
+]
+
 room_68['hvac'] = numpy.select(estado_HVAC, multiplicadores)
 
-# Cálculo del Calor del HVAC (W)
+# Definimos el rendimiento estimado del equipo 
 COP_estimado = 4.5
+
+# Calculamos la potencia electrica entre mediciones
+# se divide entre el número de salas ya que el consumo se mide por bloque
 room_68['P_electrica_W'] = (room_68['dif_cons'] * 6 * 1000) / bloqueA_rooms
+
+# Calculamos el calor térmico (Q)
 room_68['Q_hvac'] = room_68['P_electrica_W'] * COP_estimado * room_68['hvac']
 
-# Dataset limpio sin nulos
+# Usamos los datos del dataset que usaremos para predecir con svr
 datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'Q_hvac', 'radmed']).copy()
 
-# --- 2. MODELO FÍSICO (LÍNEA BASE ESTÁTICA) ---
+# Comienza el modelo físico 
 print("Ejecutando simulación física 1R1C...")
 R_fija = 0.02
 C_fija = 80000000
@@ -73,68 +86,76 @@ datos_limpios['T_simulada'] = simulacion_1R1C(
     A_sol = Asol_fijo
 )
 
-# --- 3. IA DE RESIDUOS (SVR MEJORADO) ---
-print("Entrenando IA para corregir los errores de la física...")
+print("Entrenando modelo para corregir los errores del modelo 1R1C...")
 inicio_entrenamiento = time.perf_counter()
 
-# Calculamos el error que la física no supo explicar
+# Calculamos el error
 datos_limpios['residuo_fisico'] = datos_limpios[col_T_int] - datos_limpios['T_simulada']
 
-# Extraemos el tiempo (Feature Engineering)
+# Hacemos que el modelo conozca el comportamiento, es decir, aprenda en función de la hora y dia de la semana
 datos_limpios['hora'] = datos_limpios.index.hour
 datos_limpios['dia_semana'] = datos_limpios.index.dayofweek
+datos_limpios['mes'] = datos_limpios.index.month 
 
-# NUEVAS VARIABLES: La IA ahora ve el clima, el HVAC y lo que dijo la física
+# Entradas y salidas del modelo
 X = datos_limpios[['tmed', 'hvac', 'hora', 'dia_semana', 'radmed', 'T_simulada']]
 y = datos_limpios['residuo_fisico']
 
-# Escalado de datos (Crucial para el SVR)
+# Dividir datos para test (30%) y entrenamiento (70%)
+# Se usa suffle=false para que los datos esten en orden
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, shuffle=False)
+
+# Escalado para que las magnitudes se estandaricen
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
-# Entrenamiento del modelo SVR (C aumentada para mejor ajuste de curvas complejas)
-modelo_corrector = SVR(kernel='rbf', C=100, epsilon=0.1)
-modelo_corrector.fit(X_scaled, y)
+# Modelo SVR
+modelo_svr = SVR(kernel='rbf', C=10, epsilon=0.1)
+
+print("\nEntrenando modelo SVR")
+inicio_entrenamiento = time.perf_counter()
+modelo_svr.fit(X_train_scaled, y_train)
 fin_entrenamiento = time.perf_counter()
+tiempo_train = fin_entrenamiento - inicio_entrenamiento
 
+# Predicción sobre datos test 
 inicio_prediccion = time.perf_counter()
-# La IA predice el error y se lo sumamos a la física para obtener la temperatura final
-datos_limpios['correccion_IA'] = modelo_corrector.predict(X_scaled)
-datos_limpios['T_hibrida'] = datos_limpios['T_simulada'] + datos_limpios['correccion_IA']
+y_pred_test = modelo_svr.predict(X_test_scaled)
 fin_prediccion = time.perf_counter()
+tiempo_pred = fin_prediccion - inicio_prediccion
 
-# --- 4. MÉTRICAS Y GRÁFICA ---
-T_real = datos_limpios[col_T_int]
-T_hib = datos_limpios['T_hibrida']
-T_fisica = datos_limpios['T_simulada']
+# Temperatura del modelo híbrido
+T_real_test = datos_limpios.loc[y_test.index, col_T_int] 
+T_fisica_test = X_test['T_simulada']                     
+T_hib_test = T_fisica_test + y_pred_test                 
 
-# Cálculo del R2 Híbrido
-r2_final = 1 - (numpy.sum((T_real - T_hib)**2) / numpy.sum((T_real - numpy.mean(T_real))**2))
-# Cálculo del R2 de la Física pura (para comparar)
-r2_fisica = 1 - (numpy.sum((T_real - T_fisica)**2) / numpy.sum((T_real - numpy.mean(T_real))**2))
+# Cáclulo métricas
+mae = mean_absolute_error(T_real_test, T_hib_test)
+mse = mean_squared_error(T_real_test, T_hib_test)
+rmse = numpy.sqrt(mse)
+r2 = r2_score(T_real_test, T_hib_test)
 
-mae_final = numpy.mean(numpy.abs(T_real - T_hib))
+print("RESULTADOS DEL MODELO HÍBRIDO")
+print(f"MAE  (Error Medio Absoluto) : {mae:.3f} °C")
+print(f"MSE  (Error Cuadrático Medio): {mse:.3f}")
+print(f"RMSE (Raíz del MSE)         : {rmse:.3f} °C")
+print(f"R2   (Coef. de Determinación): {r2:.4f}\n")
+      
+print("COSTE COMPUTACIONAL")
+print(f"Tiempo Entrenamiento : {tiempo_train:.4f} segundos")
+print(f"Tiempo Predicción    : {tiempo_pred:.2f} segundos")
 
-print("\n" + "=" * 50)
-print("🎯 RESULTADOS DEL MODELO HÍBRIDO")
-print("=" * 50)
-print(f"R2 Física (Base): {r2_fisica:.4f}")
-print(f"R2 Híbrido (Final): {r2_final:.4f}  <-- ¡Esta es la mejora de la IA!")
-print(f"MAE Híbrido Final: {mae_final:.3f} °C")
-print("-" * 50)
-print("⚙️ COSTE COMPUTACIONAL (IA)")
-print(f"Tiempo Entrenamiento : {fin_entrenamiento - inicio_entrenamiento:.4f} segundos")
-print(f"Tiempo Predicción    : {(fin_prediccion - inicio_prediccion) * 1000:.2f} milisegundos")
-print("=" * 50)
 
-# Gráfica comparativa
-plt.figure(figsize=(16, 7))
-plt.plot(datos_limpios.index, T_real, label='Real (Sensor)', color='black', alpha=0.7, linewidth=1.5)
-plt.plot(datos_limpios.index, datos_limpios['T_simulada'], label='Física Pura (1R1C)', color='orange', linestyle='--', alpha=0.6)
-plt.plot(datos_limpios.index, T_hib, label='Híbrido (Física + IA)', color='red', linewidth=1.5)
-plt.title('Gemelo Digital Híbrido: Sala 68 (Corrección de Residuo por SVR)', fontsize=14)
-plt.ylabel('Temperatura (°C)', fontsize=12)
+# Gráfica
+plt.figure(figsize=(15, 7))
+plt.plot(y_test.index, T_real_test, label='Temperatura interior real', color='black', linewidth=1.5)
+plt.plot(y_test.index, T_fisica_test, label='Temperatura modelo 1R1C', color='green', linestyle='-.', alpha=0.6)
+plt.plot(y_test.index, T_hib_test, label='Temperatura modelo híbrido', color='orange', linestyle='--')
+plt.plot(y_test.index, X_test['tmed'], label='Temperatura exterior', color='blue', alpha=0.3)
+
+plt.title('Comparación: Modelo Físico vs Modelo Híbrido')
+plt.ylabel('Temperatura (°C)')
+plt.legend()
 plt.grid(True, alpha=0.3)
-plt.legend(fontsize=12)
-plt.tight_layout()
 plt.show()
