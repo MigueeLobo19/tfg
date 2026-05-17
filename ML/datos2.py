@@ -12,8 +12,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 # Importa el algoritmo de regresión SVR
 from sklearn.svm import SVR
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-print("Comienza la simulación del modelo ML...\n")
+print("Comienza la simulación del modelo ML y la evaluación de la generalización...\n")
 
 # Cargamos CSV
 csv = pandas.read_csv('data-roomA-10T.csv', sep=';')
@@ -41,13 +42,10 @@ multiplicadores = [
 room_68['hvac'] = numpy.select(estado_HVAC, multiplicadores)
 
 # Definimos el rendimiento estimado del equipo 
-COP_estimado = 4.5
+COP_estimado = 3.0
 
 #room_68['dif_cons_limpio'] = room_68['dif_cons'].clip(upper=25.0)
 #room_68['dif_cons_suavizado'] = room_68['dif_cons_limpio'].rolling(window=3, min_periods=1).mean()
-
-
-
 
 # Calculamos la potencia electrica entre mediciones
 # se divide entre el número de salas ya que el consumo se mide por bloque
@@ -62,19 +60,25 @@ datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'Q_hvac', 'radmed']).copy()
 # Hacemos que el modelo conozca el comportamiento, es decir, aprenda en función de la hora y dia de la semana
 datos_limpios['hora'] = datos_limpios.index.hour
 datos_limpios['dia_semana'] = datos_limpios.index.dayofweek 
+datos_limpios['mes'] = datos_limpios.index.month 
 
 # Entradas y salidas del modelo
 columnas_X = ['tmed', 'hvac', 'hora', 'dia_semana', 'radmed']
 X = datos_limpios[columnas_X]
 y = datos_limpios['V2'] 
 
-#Dividir datos para test (30%) y entrenamiento (70%)
-# Se usa suffle=false para que los datos esten en orden
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, shuffle=False)
+# Aprende en primavera-otoño
+print("\nFiltrando por estaciones...")
+# Marzo, abril y mayo entrena
+filtro_primavera = datos_limpios['mes'].isin([3, 4, 5])
+# Septiembre, octubre y noviembre test
+filtro_otoño = datos_limpios['mes'].isin([10, 11, 12])  
 
-print(f"Total de registros limpios : {len(datos_limpios)}")
-print(f"Registros de Entrenamiento : {len(X_train)}")
-print(f"Registros de Prueba (Test) : {len(X_test)}")
+X_train = X[filtro_primavera]
+y_train = y[filtro_primavera]
+
+X_test = X[filtro_otoño]
+y_test = y[filtro_otoño]
 
 #Escalado para que las magnitudes se estandaricen
 scaler = StandardScaler()
@@ -84,7 +88,7 @@ X_test_scaled = scaler.transform(X_test)
 # Modelo SVR
 modelo_svr = SVR(kernel='rbf', C=10.0, epsilon=0.1) 
 
-print("\nEntrenando modelo SVR")
+print("\nEntrenando en primavera")
 # Tomamos valor incial del consumo de RAM
 proceso_train = psutil.Process(os.getpid())
 ram_antes_train_mb = proceso_train.memory_info().rss / (1024 * 1024)
@@ -103,7 +107,8 @@ tracemalloc.stop()
 tiempo_train = fin_entrenamiento - inicio_entrenamiento
 cpu_usada_train = psutil.cpu_percent(interval=None)
 
-# Predicción sobre datos test
+# Predicción en otoño
+print("Predicción en otoño")
 # Tomamos valor incial del consumo de RAM
 proceso_test = psutil.Process(os.getpid())
 ram_antes_test_mb = proceso_test.memory_info().rss / (1024 * 1024)
@@ -113,6 +118,7 @@ inicio_prediccion = time.perf_counter()
 y_pred_test = modelo_svr.predict(X_test_scaled)
 fin_prediccion = time.perf_counter()
 tiempo_pred = fin_prediccion - inicio_prediccion
+
 memoria_actual_test, pico_maximo_test = tracemalloc.get_traced_memory()
 tracemalloc.stop() 
 cpu_usada_test = psutil.cpu_percent(interval=None)
@@ -149,25 +155,30 @@ print(f"Pico máximo de RAM usado durante test: {pico_maximo_test_mb:.2f} MB")
 
 # Gráfica
 plt.figure(figsize=(15, 7))
-plt.plot(y_test.index, y_test, label='Temperatura interior real', color='black', linewidth=1.5)
-plt.plot(y_test.index, y_pred_test, label='Temperatura predecida con SVR', color='orange', linestyle='--')
+eje_x_seguido = numpy.arange(len(y_test))
 
+plt.plot(eje_x_seguido, y_test, label='Temperatura interior real', color='black', linewidth=1.5)
+plt.plot(eje_x_seguido, y_pred_test, label='Temperatura predicha con SVR', color='orange', linestyle='--')
 
-plt.title('Modelo Datos con SVR')
+plt.title('Modelo Datos con SVR para evaluar generalización')
 plt.ylabel('Temperatura (°C)')
 plt.legend()
 plt.grid(True, alpha=0.3)
+posiciones_etiquetas = numpy.linspace(0, len(y_test) - 1, 10, dtype=int)
+fechas_etiquetas = [y_test.index[i].strftime('%d-%b') for i in posiciones_etiquetas] # Formato: 15-Dec
+plt.xticks(posiciones_etiquetas, fechas_etiquetas, rotation=45)
 plt.show()
 
 plt.figure(figsize=(15, 5))
-plt.plot(y_test.index, residuos_test, label='Error en la simulación', color='crimson', linewidth=1)
+plt.plot(eje_x_seguido, residuos_test, label='Error en la simulación', color='crimson', linewidth=1)
 plt.axhline(0, color='black', linestyle='-', linewidth=1.5)
-plt.fill_between(y_test.index, residuos_test, 0, 
+plt.fill_between(eje_x_seguido, residuos_test, 0, 
                  where=(residuos_test >= 0), color='crimson', alpha=0.3)
-plt.fill_between(y_test.index, residuos_test, 0, 
+plt.fill_between(eje_x_seguido, residuos_test, 0, 
                  where=(residuos_test < 0), color='blue', alpha=0.3)
-plt.title('Error del Modelo de Datos SVR')
+plt.title('Error del Modelo de Datos SVR para evaluar generalización')
 plt.ylabel('Error en Grados (°C)')
 plt.legend(loc='upper right')
 plt.grid(True, alpha=0.3)
+plt.xticks(posiciones_etiquetas, fechas_etiquetas, rotation=45)
 plt.show()

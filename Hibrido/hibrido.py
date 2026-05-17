@@ -1,10 +1,12 @@
 import pandas 
 import numpy
 import matplotlib.pyplot as plt 
+import psutil
+import tracemalloc
+import os
 from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import time
 
 print("Comienza la simulación del modelo híbrido...\n")
@@ -114,27 +116,56 @@ X_test_scaled = scaler.transform(X_test)
 modelo_svr = SVR(kernel='rbf', C=10, epsilon=0.1)
 
 print("\nEntrenando modelo SVR")
+# Tomamos valor incial del consumo de RAM
+proceso_train = psutil.Process(os.getpid())
+ram_antes_train_mb = proceso_train.memory_info().rss / (1024 * 1024)
+
+# Vaciamos el cache de CPU para medir el uso real durante el entrenamiento
+psutil.cpu_percent(interval=None)
+# Activamos el seguimiento de memoria con tracemalloc
+tracemalloc.start()
 inicio_entrenamiento = time.perf_counter()
 modelo_svr.fit(X_train_scaled, y_train)
 fin_entrenamiento = time.perf_counter()
+# Tomamos valor final del consumo de RAM
+memoria_actual_train, pico_maximo_train = tracemalloc.get_traced_memory()
+tracemalloc.stop() 
 tiempo_train = fin_entrenamiento - inicio_entrenamiento
+cpu_usada_train = psutil.cpu_percent(interval=None)
 
 # Predicción sobre datos test 
 inicio_prediccion = time.perf_counter()
+# Tomamos valor incial del consumo de RAM
+proceso_test = psutil.Process(os.getpid())
+ram_antes_test_mb = proceso_test.memory_info().rss / (1024 * 1024)
+psutil.cpu_percent(interval=None)
+tracemalloc.start()
 y_pred_test = modelo_svr.predict(X_test_scaled)
 fin_prediccion = time.perf_counter()
+memoria_actual_test, pico_maximo_test = tracemalloc.get_traced_memory()
+tracemalloc.stop() 
+cpu_usada_test = psutil.cpu_percent(interval=None)
+
+# CPU y RAM al terminar
+ram_despues_train_mb = proceso_train.memory_info().rss / (1024 * 1024)
+
+pico_maximo_train_mb = pico_maximo_train / (1024 * 1024)
+pico_maximo_test_mb = pico_maximo_test / (1024 * 1024)
 tiempo_pred = fin_prediccion - inicio_prediccion
 
 # Temperatura del modelo híbrido
 T_real_test = datos_limpios.loc[y_test.index, col_T_int] 
 T_fisica_test = X_test['T_simulada']                     
-T_hib_test = T_fisica_test + y_pred_test                 
+T_hib_test = T_fisica_test + y_pred_test   
+residuos_test = T_real_test - T_hib_test              
 
 # Cáclulo métricas
-mae = mean_absolute_error(T_real_test, T_hib_test)
-mse = mean_squared_error(T_real_test, T_hib_test)
+mae = numpy.mean(numpy.abs(T_real_test - T_hib_test))
+mse = numpy.mean((T_real_test - T_hib_test)**2)
 rmse = numpy.sqrt(mse)
-r2 = r2_score(T_real_test, T_hib_test)
+ss_res = numpy.sum((T_real_test - T_hib_test)**2)         
+ss_tot = numpy.sum((T_real_test - numpy.mean(T_real_test))**2) 
+r2 = 1 - (ss_res / ss_tot)
 
 print("RESULTADOS DEL MODELO HÍBRIDO")
 print(f"MAE  (Error Medio Absoluto) : {mae:.3f} °C")
@@ -145,17 +176,32 @@ print(f"R2   (Coef. de Determinación): {r2:.4f}\n")
 print("COSTE COMPUTACIONAL")
 print(f"Tiempo Entrenamiento : {tiempo_train:.4f} segundos")
 print(f"Tiempo Predicción    : {tiempo_pred:.2f} segundos")
+print(f"Uso de CPU durante entrenamiento: {cpu_usada_train}%")
+print(f"Uso de CPU durante test: {cpu_usada_test}%")
+print(f"Pico máximo de RAM usado durante entrenamiento: {pico_maximo_train_mb:.2f} MB")
+print(f"Pico máximo de RAM usado durante test: {pico_maximo_test_mb:.2f} MB")
 
 
 # Gráfica
 plt.figure(figsize=(15, 7))
 plt.plot(y_test.index, T_real_test, label='Temperatura interior real', color='black', linewidth=1.5)
-plt.plot(y_test.index, T_fisica_test, label='Temperatura modelo 1R1C', color='green', linestyle='-.', alpha=0.6)
 plt.plot(y_test.index, T_hib_test, label='Temperatura modelo híbrido', color='orange', linestyle='--')
-plt.plot(y_test.index, X_test['tmed'], label='Temperatura exterior', color='blue', alpha=0.3)
 
 plt.title('Comparación: Modelo Físico vs Modelo Híbrido')
 plt.ylabel('Temperatura (°C)')
 plt.legend()
+plt.grid(True, alpha=0.3)
+plt.show()
+
+plt.figure(figsize=(15, 5))
+plt.plot(y_test.index, residuos_test, label='Error en la simulación', color='crimson', linewidth=1)
+plt.axhline(0, color='black', linestyle='-', linewidth=1.5)
+plt.fill_between(y_test.index, residuos_test, 0, 
+                 where=(residuos_test >= 0), color='crimson', alpha=0.3)
+plt.fill_between(y_test.index, residuos_test, 0, 
+                 where=(residuos_test < 0), color='blue', alpha=0.3)
+plt.title('Error del Modelo de Datos SVR')
+plt.ylabel('Error en Grados (°C)')
+plt.legend(loc='upper right')
 plt.grid(True, alpha=0.3)
 plt.show()

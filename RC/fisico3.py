@@ -1,6 +1,6 @@
 import pandas 
 import numpy
-import matplotlib.pyplot as plt # Añadido para poder graficar
+import matplotlib.pyplot as plt 
 import time
 
 print("Comienza la simulación del modelo 1R1C...\n")
@@ -14,10 +14,6 @@ csv.set_index('Date', inplace=True)
 # Leemos los datos de la sala 68 y ordenamos
 room_68 = csv[csv['room'] == 68].copy()
 room_68.sort_index(inplace=True)
-
-# Buscamos si hay huecos de mas de 10 minutos
-#diferencia_t = room_68.index.to_series().diff()
-#huecos_68 = diferencia_t[diferencia_t > pandas.Timedelta(minutes=10)]
 
 # Salas en bloque A
 bloqueA_rooms = csv['room'].nunique()
@@ -44,8 +40,44 @@ room_68['P_electrica_W'] = (room_68['dif_cons'] * 6 * 1000) / (bloqueA_rooms)
 # Calculamos el calor térmico (Q)
 room_68['Q_hvac'] = room_68['P_electrica_W'] * COP_estimado * room_68['hvac']
 
-# Usamos los datos del dataset que usaremos para modelar el 1R1C
-datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'Q_hvac', 'radmed']).copy()
+# ==============================================================================
+# 🚨 CAMBIO 1: DETECTOR DE LATIDO E IMPUTACIÓN DE TELEMETRÍA 🚨
+# ==============================================================================
+# Identificamos el fallo del sensor porque el consumo base (standby de ~0.23) 
+# cae a exactamente 0.0.
+filtro_sensor_muerto = room_68['dif_cons'] == 0.0
+
+# Extraemos la potencia histórica cuando la máquina SÍ funciona correctamente
+datos_sanos_calor = room_68[(room_68['hvac'] == 1) & (room_68['Q_hvac'] > 0)]
+datos_sanos_frio = room_68[(room_68['hvac'] == -1) & (room_68['Q_hvac'] < 0)]
+
+potencia_media_calor = datos_sanos_calor['Q_hvac'].mean() if not datos_sanos_calor.empty else 2000
+potencia_media_frio = datos_sanos_frio['Q_hvac'].mean() if not datos_sanos_frio.empty else -2000
+
+# Definimos el horario lectivo (Lunes a Viernes, de 08:00 a 20:00)
+horario_lectivo = (room_68.index.hour >= 8) & (room_68.index.hour <= 20) & (room_68.index.dayofweek < 5)
+
+# Cruzamos las reglas: Sensor muerto + Invierno (Feb) + Clase = Inyectar Calor
+falla_invierno = filtro_sensor_muerto & (room_68.index.month == 2) & horario_lectivo
+# Sensor muerto + Verano (Jun) + Clase = Inyectar Frío
+falla_verano = filtro_sensor_muerto & (room_68.index.month == 6) & horario_lectivo
+
+num_muertos = filtro_sensor_muerto.sum()
+print(f"⚠️ REPARACIÓN DE TELEMETRÍA (Pérdida de 'Heartbeat'):")
+print(f"   Detectados {num_muertos} registros sin consumo base (dif_cons = 0.0).")
+print(f"   -> Reparados {falla_invierno.sum()} huecos en horario lectivo de Invierno.")
+print(f"   -> Reparados {falla_verano.sum()} huecos en horario lectivo de Verano.\n")
+
+# Inyectamos las potencias calculadas en esos huecos
+room_68.loc[falla_invierno, 'Q_hvac'] = potencia_media_calor
+room_68.loc[falla_verano, 'Q_hvac'] = potencia_media_frio
+# ==============================================================================
+
+# 🚨 CAMBIO 2: MODIFICACIÓN DEL DROPNA 🚨
+# Quitamos 'Q_hvac' de la lista del dropna. Si el sensor estaba muerto pero era de noche, 
+# se queda el 0, lo cual es correcto. Si era de día, ya le hemos puesto el calor/frío.
+datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'radmed']).copy()
+
 
 # Valores típicos de R y C
 R_inicial = 0.02
@@ -62,7 +94,6 @@ def simulacion_1R1C(T_ext, Q_hvac, Rad_solar, T_int_inicial, R, C, A_sol, dt_min
     T_sim = numpy.zeros(n_pasos)
     T_sim[0] = T_int_inicial
     
-  
     T_ext_vals = T_ext.values
     Q_hvac_vals = Q_hvac.values
     Rad_vals = Rad_solar.values 
@@ -90,26 +121,14 @@ T_simulada = simulacion_1R1C(
 # Guardamos el resultado
 datos_limpios['T_simulada'] = T_simulada
 
-fin_simulacion = time.perf_counter()
-tiempo_ejecucion = fin_simulacion - inicio_simulacion
-
 # Calculo de error absoluto
 datos_limpios['error_abs'] = (datos_limpios[col_T_int] - datos_limpios['T_simulada']).abs()
 
 fin_simulacion = time.perf_counter()
 tiempo_ejecucion = fin_simulacion - inicio_simulacion
 
-#umbral_error = 10.0 
-#fallos_modelo = datos_limpios[datos_limpios['error_abs'] > umbral_error].copy()
-#print(f"Se han encontrado {len(fallos_modelo)} registros con un error mayor a {umbral_error}°C.")
-#print("\nRegistros con mayor error:")
-# Ordenamos por error de mayor a menor y mostramos columnas clave
-#columnas_analisis = [col_T_int, 'T_simulada', 'error_abs', col_T_ext, 'hvac', 'dif_cons']
-#print(fallos_modelo[columnas_analisis].sort_values(by='error_abs', ascending=False))
-
 T_real = datos_limpios[col_T_int]
 T_sim = datos_limpios['T_simulada']
-datos_limpios['residuo'] = datos_limpios[col_T_int] - datos_limpios['T_simulada']
 
 # Error Medio Absoluto
 mae = numpy.mean(numpy.abs(T_real - T_sim))
@@ -135,22 +154,10 @@ plt.figure(figsize=(15, 7))
 
 plt.plot(datos_limpios.index, datos_limpios[col_T_int], label='Temperatura interior real', color='black', linewidth=1.5)
 plt.plot(datos_limpios.index, datos_limpios['T_simulada'], label='Temperatura interior simulada', color='orange', linestyle='--')
+plt.plot(datos_limpios.index, datos_limpios[col_T_ext], label='Temperatura exterior', color='blue', alpha=0.3)
 
-plt.title(f'Modelo físico: 1R1C')
+plt.title(f'Modelo 1R1C: R={R_inicial}, C={C_inicial}')
 plt.ylabel('Temperatura (°C)')
 plt.legend()
-plt.grid(True, alpha=0.3)
-plt.show()
-
-plt.figure(figsize=(15, 5))
-plt.plot(datos_limpios.index, datos_limpios['residuo'], label='Error en la simulación', color='crimson', linewidth=1)
-plt.axhline(0, color='black', linestyle='-', linewidth=1.5)
-plt.fill_between(datos_limpios.index, datos_limpios['residuo'], 0, 
-                 where=(datos_limpios['residuo'] >= 0), color='crimson', alpha=0.3)
-plt.fill_between(datos_limpios.index, datos_limpios['residuo'], 0, 
-                 where=(datos_limpios['residuo'] < 0), color='blue', alpha=0.3)
-plt.title('Error del Modelo Físico 1R1C')
-plt.ylabel('Error en Grados (°C)')
-plt.legend(loc='upper right')
 plt.grid(True, alpha=0.3)
 plt.show()
