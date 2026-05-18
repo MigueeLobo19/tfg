@@ -2,6 +2,10 @@ import pandas
 import numpy
 import matplotlib.pyplot as plt # Añadido para poder graficar
 import time
+import psutil
+import tracemalloc
+import os
+
 
 print("Comienza la simulación del modelo 1R1C...\n")
 
@@ -77,6 +81,14 @@ def simulacion_1R1C(T_ext, Q_hvac, Rad_solar, T_int_inicial, R, C, A_sol, dt_min
     return T_sim
 
 inicio_simulacion = time.perf_counter()
+# Tomamos valor incial del consumo de RAM
+proceso = psutil.Process(os.getpid())
+ram_antes_mb = proceso.memory_info().rss / (1024 * 1024)
+
+# Vaciamos el cache de CPU para medir el uso real durante el entrenamiento
+psutil.cpu_percent(interval=None)
+# Activamos el seguimiento de memoria con tracemalloc
+tracemalloc.start()
 T_simulada = simulacion_1R1C(
     T_ext = datos_limpios[col_T_ext],
     Q_hvac = datos_limpios['Q_hvac'],
@@ -86,26 +98,19 @@ T_simulada = simulacion_1R1C(
     C = C_inicial,
     A_sol = Asol_inicial  
 )
+# Tomamos valor final del consumo de RAM
+fin_simulacion = time.perf_counter()
+memoria_actual, pico_maximo = tracemalloc.get_traced_memory()
+tracemalloc.stop() 
+cpu_usada = psutil.cpu_percent(interval=None)
+tiempo_ejecucion = fin_simulacion - inicio_simulacion
 
 # Guardamos el resultado
 datos_limpios['T_simulada'] = T_simulada
 
-fin_simulacion = time.perf_counter()
-tiempo_ejecucion = fin_simulacion - inicio_simulacion
-
 # Calculo de error absoluto
 datos_limpios['error_abs'] = (datos_limpios[col_T_int] - datos_limpios['T_simulada']).abs()
 
-fin_simulacion = time.perf_counter()
-tiempo_ejecucion = fin_simulacion - inicio_simulacion
-
-#umbral_error = 10.0 
-#fallos_modelo = datos_limpios[datos_limpios['error_abs'] > umbral_error].copy()
-#print(f"Se han encontrado {len(fallos_modelo)} registros con un error mayor a {umbral_error}°C.")
-#print("\nRegistros con mayor error:")
-# Ordenamos por error de mayor a menor y mostramos columnas clave
-#columnas_analisis = [col_T_int, 'T_simulada', 'error_abs', col_T_ext, 'hvac', 'dif_cons']
-#print(fallos_modelo[columnas_analisis].sort_values(by='error_abs', ascending=False))
 
 T_real = datos_limpios[col_T_int]
 T_sim = datos_limpios['T_simulada']
@@ -128,7 +133,11 @@ print(f"MAE  (Error Medio Absoluto) : {mae:.3f} °C")
 print(f"MSE  (Error Cuadrático Medio): {mse:.3f}")
 print(f"RMSE (Raíz del MSE)         : {rmse:.3f} °C")
 print(f"R2: {r_cuadrado:.4f}")
+
+print("COSTE COMPUTACIONAL")
 print(f"Tiempo de ejecución         : {tiempo_ejecucion:.2f} segundos")
+print(f"Uso de CPU durante simulación: {cpu_usada}%")
+print(f"Pico máximo de RAM usado durante simulación: {pico_maximo:.2f} MB")
 
 # Dibujamos las gráficas
 plt.figure(figsize=(15, 7))
