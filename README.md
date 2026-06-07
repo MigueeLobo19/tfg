@@ -3,7 +3,7 @@ Este repositorio contiene el código implementado en Python durante el Trabajo F
 Este Trabajo Fin de Grado esta formado por un Gemelo Digital térmico de una sala, el esquema es el siguiente:
 ![Gemelo Digital Global](imagenes/vista-global-dt.png)
 Dentro del anterior Gememlo Digital, este trabajo se enfoca en el motor predictivo formado por los 3 distintos modelos predictivos (físico, datos e híbrido). Todos los modelos presentan gráficas y métricas para analizar los resultados y obtener una visión clara de la capacidad de predicción de cada uno, así como los intervalos de prediccón donde estos fallan más.
-![Gemelo Digital Predicción](imagenes/Gemelo_Digital_Diagrama.png)
+![Gemelo Digital Predicción](imagenes/Gemelo_Digital_diagrama.png)
 
 ## Requisitos previos
 Para poder ejecutar los distintos modelos es neceario lo siguiente:
