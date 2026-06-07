@@ -1,3 +1,6 @@
+import json
+import sys
+
 import pandas 
 import numpy
 import matplotlib.pyplot as plt 
@@ -14,23 +17,46 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVR
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+if len(sys.argv) < 2:
+    print("Error: Tienes que pasar el archivo de configuración.")
+    print("Uso: python mi_script.py config.json")
+    sys.exit(1)
+
+ruta_config = sys.argv[1]    
+
+print(f"Cargando configuración desde: {ruta_config}")
+with open(ruta_config, 'r') as archivo:
+    config = json.load(archivo)
+
+dataset = config['dataset']
+sala_seleccionada = config['room']
+t_int = config['t_int']
+t_ext = config['t_ext']
+COP_estimado = config['COP_estimado']
+radmed = config['radmed']
+dif_cons = config['dif_cons']
+HVAC_off = config['HVAC_off']
+HVAC_calor = config['HVAC_calor']
+HVAC_frio = config['HVAC_frio']
+    
+
 print("Comienza la simulación del modelo ML y la evaluación de la generalización...\n")
 
 # Cargamos CSV
-csv = pandas.read_csv('data-roomA-10T.csv', sep=';')
+csv = pandas.read_csv(dataset, sep=';')
 csv.columns = csv.columns.str.strip()
 csv['Date'] = pandas.to_datetime(csv['Date'], utc=True)
 csv.set_index('Date', inplace=True)
 
 # Leemos los datos de la sala 68 y ordenamos
-room_68 = csv[csv['room'] == 68].copy()
+room_68 = csv[csv['room'] == sala_seleccionada].copy()
 room_68.sort_index(inplace=True)
 
 # Salas en bloque A
 bloqueA_rooms = csv['room'].nunique()
 
 # Estado del HVAC
-estado_HVAC = [room_68['V5_0'] == 1, room_68['V5_1'] == 1, room_68['V5_2'] == 1]
+estado_HVAC = [room_68[HVAC_off] == 1, room_68[HVAC_calor] == 1, room_68[HVAC_frio] == 1]
 
 # En función de si el aporte calorífico es positivo (calefacción) o negativo (aire acondicionado)
 multiplicadores = [
@@ -55,7 +81,7 @@ room_68['P_electrica_W'] = (room_68['dif_cons'] * 6 * 1000) / bloqueA_rooms
 room_68['Q_hvac'] = room_68['P_electrica_W'] * COP_estimado * room_68['hvac']
 
 # Usamos los datos del dataset que usaremos para 
-datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'Q_hvac', 'radmed']).copy()
+datos_limpios = room_68.dropna(subset=[t_int, t_ext, 'Q_hvac', radmed]).copy()
 
 # Hacemos que el modelo conozca el comportamiento, es decir, aprenda en función de la hora y dia de la semana
 datos_limpios['hora'] = datos_limpios.index.hour
@@ -63,9 +89,9 @@ datos_limpios['dia_semana'] = datos_limpios.index.dayofweek
 datos_limpios['mes'] = datos_limpios.index.month 
 
 # Entradas y salidas del modelo
-columnas_X = ['tmed', 'hvac', 'hora', 'dia_semana', 'radmed']
+columnas_X = [t_ext, 'hvac', 'hora', 'dia_semana', radmed]
 X = datos_limpios[columnas_X]
-y = datos_limpios['V2'] 
+y = datos_limpios[t_int] 
 
 # Aprende en primavera-otoño
 print("\nFiltrando por estaciones...")

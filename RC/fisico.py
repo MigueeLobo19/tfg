@@ -1,22 +1,53 @@
+import json
+import string
+
 import pandas 
 import numpy
-import matplotlib.pyplot as plt # Añadido para poder graficar
+import matplotlib.pyplot as plt
 import time
 import psutil
 import tracemalloc
 import os
+import sys
 
+
+if len(sys.argv) < 2:
+    print("❌ Error: Tienes que pasar el archivo de configuración.")
+    print("Uso: python mi_script.py config.json")
+    sys.exit(1)
+
+ruta_config = sys.argv[1]
+
+print(f"Cargando configuración desde: {ruta_config}")
+with open(ruta_config, 'r') as archivo:
+    config = json.load(archivo)
+
+dataset = config['dataset']
+sala_seleccionada = config['room']
+COP_estimado = config['COP_estimado']
+R_inicial = config['R_inicial']
+C_inicial = config['C_inicial']
+Asol_inicial = config['Asol_inicial']
+salas = config['salas']
+HVAC_off = config['HVAC_off']
+HVAC_calor = config['HVAC_calor']
+HVAC_frio = config['HVAC_frio']
+t_int = config['t_int']
+t_ext = config['t_ext']
+radmed = config['radmed']
+dif_cons = config['dif_cons']
+fecha = config['fecha']
 
 print("Comienza la simulación del modelo 1R1C...\n")
 
 # Cargamos CSV
-csv = pandas.read_csv('data-roomA-10T.csv', sep=';')
+csv = pandas.read_csv(dataset, sep=';')
 csv.columns = csv.columns.str.strip()
-csv['Date'] = pandas.to_datetime(csv['Date'], utc=True)
-csv.set_index('Date', inplace=True)
+csv[fecha] = pandas.to_datetime(csv[fecha], utc=True)
+csv.set_index(fecha, inplace=True)
 
 # Leemos los datos de la sala 68 y ordenamos
-room_68 = csv[csv['room'] == 68].copy()
+room_68 = csv[csv[salas] == sala_seleccionada].copy()
 room_68.sort_index(inplace=True)
 
 # Buscamos si hay huecos de mas de 10 minutos
@@ -24,10 +55,10 @@ room_68.sort_index(inplace=True)
 #huecos_68 = diferencia_t[diferencia_t > pandas.Timedelta(minutes=10)]
 
 # Salas en bloque A
-bloqueA_rooms = csv['room'].nunique()
+bloqueA_rooms = csv[salas].nunique()
 
 # Estado del HVAC
-estado_HVAC = [room_68['V5_0'] == 1, room_68['V5_1'] == 1, room_68['V5_2'] == 1]
+estado_HVAC = [room_68[HVAC_off] == 1, room_68[HVAC_calor] == 1, room_68[HVAC_frio] == 1]
 
 # En función de si el aporte calorífico es positivo (calefacción) o negativo (aire acondicionado)
 multiplicadores = [
@@ -49,15 +80,15 @@ room_68['P_electrica_W'] = (room_68['dif_cons'] * 6 * 1000) / (bloqueA_rooms)
 room_68['Q_hvac'] = room_68['P_electrica_W'] * COP_estimado * room_68['hvac']
 
 # Usamos los datos del dataset que usaremos para modelar el 1R1C
-datos_limpios = room_68.dropna(subset=['V2', 'tmed', 'Q_hvac', 'radmed']).copy()
+datos_limpios = room_68.dropna(subset=[t_int, t_ext, 'Q_hvac', radmed]).copy()
 
 # Valores típicos de R y C
-R_inicial = 0.02
-C_inicial = 80000000
-Asol_inicial = 2
+# R_inicial = 0.02
+# C_inicial = 80000000
+# Asol_inicial = 2
 
-col_T_int = 'V2'
-col_T_ext = 'tmed'
+col_T_int = t_int
+col_T_ext = t_ext
 
 def simulacion_1R1C(T_ext, Q_hvac, Rad_solar, T_int_inicial, R, C, A_sol, dt_minutos=10):
     dt_segundos = dt_minutos * 60

@@ -1,0 +1,14 @@
+{
+    "dataset": "data-roomA-10T.csv",
+    "salas": "room", 
+    "room": 68,
+    "COP_estimado": 4.5,
+    "t_int": "V2",
+    "t_ext": "tmed",
+    "radmed": "radmed",
+    "dif_cons": "dif_cons",
+    "HVAC_off": "V5_0",
+    "HVAC_calor": "V5_1",
+    "HVAC_frio": "V5_2",
+    "fecha": "Date"
+}

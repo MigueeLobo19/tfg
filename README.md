@@ -25,5 +25,5 @@ python3 <directorio_script>/<nombre_script>.py
 ```
 Una vez ejecutado el script, apareceran 2 gráficas:
 * Gráfica 1: muestra la diferencia entre la temperatura simulada y la real
-* Gráfica 2: muestra el error durante la simulación en la predicción de la temperatuara.
+* Gráfica 2: muestra el error durante la simulación en la predicción de la temperatura.
 Adicionalmente, apareceran en el terminal donde se ejecutó el script los resultados de las métricas, tanto de rendimiento como de coste computacional.
