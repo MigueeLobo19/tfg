@@ -1,11 +1,17 @@
 # Modelos híbridos del Gemelo Digital térmico
 Este repositorio contiene el código implementado en Python durante el Trabajo Fin de Grado con los modelos predictivos creados para el gemelo digital térmico.
+Este Trabajo Fin de Grado esta formado por un Gemelo Digital térmico de una sala, el esquema es el siguiente:
+
+Dentro del anterior Gememlo Digital, este trabajo se enfoca en el motor predictivo formado por los 3 distintos modelos predictivos (físico, datos e híbrido). Todos los modelos presentan gráficas y métricas para analizar los resultados y obtener una visión clara de la capacidad de predicción de cada uno, así como los intervalos de prediccón donde estos fallan más.
+
 ## Requisitos previos
 Para poder ejecutar los distintos modelos es neceario lo siguiente:
-* Instalar Pyhton: si no se tiene instalado, en la página oficial de Python https://www.python.org/, se puede ver como realizarla. La versión de Python instalada durante el desarrollo es Python 3.12.3
-* Guardar el dataset data-roomA-10T.csv dentro de los directorios de los modelos: el Dataset se puede descargar desde el repositorio Zenodo en la dirección https://zenodo.org/records/7620136. Una vez descargado, acceder al fichero dentro de la ruta Data_Nature > processed_data > data-roomA-10T.csv. Una vez encontrado, es neceario copiarlo dentro de las 3 carpetas del proyecto (RC, ML e Híbrido), para que los scripts tengan acceso al Dataset.
+* Instalar Pyhton: la versión de Python instalada durante el desarrollo es Python 3.12.3
+* Guardar el dataset data-roomA-10T.csv dentro de los directorios de los modelos: el Dataset se puede descargar desde el repositorio Zenodo en la dirección https://zenodo.org/records/7620136. Es neceario descargarlo en las capetas donde se alojen los modelos predictivos.
+* Instalar dependencias: se ha generado un txt con nombre requirements.txt para la instalación de dependencias. Para su instalación hay que ejecutar el comando "pip install -r requirements.txt" dentro del directorio donde se encuentra el txt.
 ## Descripción de los ficheros
 Dentro del reposiorio se encuentar 3 ficheros que contienen los distintos scripts con los modelos. Se ha crado una enumeración los directorios y sus respectivos scripts de Python.
+* config.json: json con la configuración necesaria para el uso de los modelos con distitnos dataset. Conservar el existente en el repositorio si no se quiere modificar el dataset.
 * RC: contiene el código del modelo 1R1C
     * RC/fisico.py: código del modelo físico que predice la temperatura interior de la sala a lo largo de un año.
 * ML: contiene el código del modelo de datos SVR
@@ -22,7 +28,7 @@ Todos los modelos tiene el mismo porcentaje en la división del dataset, siendo 
 ## Ejecución
 Para su ejecución, una vez realizaos los requisitos previos, basta con ejecutar el comando
 ```bash
-python3 <directorio_script>/<nombre_script>.py
+python3 <directorio_script>/<nombre_script><archivo_configuración>.py
 ```
 Una vez ejecutado el script, apareceran 2 gráficas:
 * Gráfica 1: muestra la diferencia entre la temperatura simulada y la real
