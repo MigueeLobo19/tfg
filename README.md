@@ -17,6 +17,7 @@ Dentro del reposiorio se encuentar 3 ficheros que contienen los distintos script
 Las X correspondiente a los ficheros que evaluan la generalización tienen el siguiente signfiicado:
 * X = 1: entrenamiento del modelo en verano y test en invierno
 * X = 2: entrenamiento del modelo en primavera y test en otoño
+  
 Todos los modelos tiene el mismo porcentaje en la división del dataset, siendo un 70/30 para entrenamiento y test, respectivamente.
 ## Ejecución
 Para su ejecución, una vez realizaos los requisitos previos, basta con ejecutar el comando
@@ -25,5 +26,6 @@ python3 <directorio_script>/<nombre_script>.py
 ```
 Una vez ejecutado el script, apareceran 2 gráficas:
 * Gráfica 1: muestra la diferencia entre la temperatura simulada y la real
-* Gráfica 2: muestra el error durante la simulación en la predicción de la temperatura.
+* Gráfica 2: muestra el error durante la simulación en la predicción de la temperatuara.
+
 Adicionalmente, apareceran en el terminal donde se ejecutó el script los resultados de las métricas, tanto de rendimiento como de coste computacional.
