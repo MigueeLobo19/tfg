@@ -29,7 +29,7 @@ Todos los modelos tiene el mismo porcentaje en la división del dataset, siendo 
 ## Ejecución
 Para su ejecución, una vez realizaos los requisitos previos, basta con ejecutar el comando
 ```bash
-python3 <directorio_script>/<nombre_script><archivo_configuración>.py
+python3 <directorio_script>/<nombre_script>.py <archivo_configuración>
 ```
 Una vez ejecutado el script, apareceran 2 gráficas:
 * Gráfica 1: muestra la diferencia entre la temperatura simulada y la real
