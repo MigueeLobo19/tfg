@@ -37,3 +37,5 @@ Una vez ejecutado el script, apareceran 2 gráficas:
 * Gráfica 2: muestra el error durante la simulación en la predicción de la temperatuara.
 
 Adicionalmente, apareceran en el terminal donde se ejecutó el script los resultados de las métricas, tanto de rendimiento como de coste computacional.
+
+Lo anterior nos permitirá analizar la viablidad del modelo híbrido frente a un modelo RC físico y una basado en datos, lo que nos ayudará a conocer si el modelo híbrido presenta mejoras dentro del núncleo predicitvo del Gemelo Digital térmico.
