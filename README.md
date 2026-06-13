@@ -1,4 +1,4 @@
-# Modelos híbridos del Gemelo Digital térmico
+# Núcleo predictivo del Gemelo Digital térmico 
 Este repositorio contiene el código implementado en Python durante el Trabajo Fin de Grado con los modelos predictivos creados para el gemelo digital térmico.
 Este Trabajo Fin de Grado esta formado por un Gemelo Digital térmico de una sala, el esquema es el siguiente:
 ![Gemelo Digital Global](imagenes/vista-global-dt.png)
