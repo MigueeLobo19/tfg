@@ -12,6 +12,7 @@ Para poder ejecutar los distintos modelos es neceario lo siguiente:
 * Instalar dependencias: se ha generado un txt con nombre requirements.txt para la instalación de dependencias. Para su instalación hay que ejecutar el comando "pip install -r requirements.txt" dentro del directorio donde se encuentra el txt.
 ## Descripción de los ficheros
 Dentro del reposiorio se encuentar 3 ficheros que contienen los distintos scripts con los modelos. Se ha crado una enumeración los directorios y sus respectivos scripts de Python.
+* data-roomA-10T.csv: dataset usado para las pruebas, incorporados en los 3 modelos dentro de las carpetas RC, ML h Híbrido.
 * config.json: json con la configuración necesaria para el uso de los modelos con distitnos dataset. Conservar el existente en el repositorio si no se quiere modificar el dataset.
 * RC: contiene el código del modelo 1R1C
     * RC/fisico.py: código del modelo físico que predice la temperatura interior de la sala a lo largo de un año.
