@@ -26,9 +26,9 @@ with open(ruta_config, 'r') as archivo:
 dataset = config['dataset']
 sala_seleccionada = config['room']
 COP_estimado = config['COP_estimado']
-R_inicial = config['R_inicial']
-C_inicial = config['C_inicial']
-Asol_inicial = config['Asol_inicial']
+R_fija = config['R_inicial']
+C_fija = config['C_inicial']
+Asol_fijo = config['Asol_inicial']
 salas = config['salas']
 HVAC_off = config['HVAC_off']
 HVAC_calor = config['HVAC_calor']
@@ -67,8 +67,6 @@ multiplicadores = [
 
 room_68['hvac'] = numpy.select(estado_HVAC, multiplicadores)
 
-# Definimos el rendimiento estimado del equipo 
-COP_estimado = 4.5
 
 # Calculamos la potencia electrica entre mediciones
 # se divide entre el número de salas ya que el consumo se mide por bloque
@@ -82,9 +80,6 @@ datos_limpios = room_68.dropna(subset=[t_int, t_ext, 'Q_hvac', radmed]).copy()
 
 # Comienza el modelo físico 
 print("Ejecutando simulación física 1R1C...")
-R_fija = 0.02
-C_fija = 80000000
-Asol_fijo = 2.0
 
 col_T_int = t_int
 col_T_ext = t_ext
